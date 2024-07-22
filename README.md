@@ -11,10 +11,10 @@ SignatureSlip is a Windows driver loading exploit that empowers users to bypass 
 
 - Features :
 
-Bypasses Digital Certificate Validation : WinDriverForce bypasses the digital certificate validation checks in the CertVerifyTimeValidity function, allowing users to load unsigned drivers on Windows systems.
-Customizable Driver Loading : The tool provides a user-friendly interface for selecting and loading unsigned drivers.
-Anti-Debugging Techniques : WinDriverForce includes anti-debugging techniques to evade detection by debuggers and security software.
-Cross-Platform Compatibility : The tool supports multiple Windows versions, from Windows 7 to the latest releases.
+~ Bypasses Digital Certificate Validation : WinDriverForce bypasses the digital certificate validation checks in the CertVerifyTimeValidity function, allowing users to load unsigned drivers on Windows systems.
+~ Customizable Driver Loading : The tool provides a user-friendly interface for selecting and loading unsigned drivers.
+~ Anti-Debugging Techniques : WinDriverForce includes anti-debugging techniques to evade detection by debuggers and security software.
+~ Cross-Platform Compatibility : The tool supports multiple Windows versions, from Windows 7 to the latest releases.
 
 
 - Getting Started :

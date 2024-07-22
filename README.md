@@ -7,7 +7,7 @@ This code is a driver loading exploit that bypasses the Windows OS's driver sign
 
 - Overview
 
-SignatureSlip is a Windows driver loading exploit that empowers users to bypass the digital certificate validation checks in the CertVerifyTimeValidity function, allowing them to load unsigned drivers on Windows systems. This tool is designed for educational purposes only and should not be used for malicious activities.
+SignatureSlip is a Windows driver loading exploit that empowers users to bypass the digital certificate validation checks in the CertVerifyTimeValidity function, allowing them to load unsigned drivers on Windows systems.
 
 - Features :
 

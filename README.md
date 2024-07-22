@@ -20,6 +20,7 @@ Cross-Platform Compatibility : The tool supports multiple Windows versions, from
 - Getting Started :
 
 Clone the repository : "git clone https://github.com/0xp17j8/SignatureSlip.git"
+
 Build the project : cl /EHsc /I "C:\\Detours\\include" SignatureSlip.c /link /LIBPATH:"C:\Detours\lib.ARM\detours.lib" C:\Detours\lib.ARM\detours.lib
 Run the exploit : ./SignatureSlip.exe
 Follow the prompts to select and load an unsigned driver
@@ -48,5 +49,4 @@ This project is licensed under the MIT License.
 - Author
 
 [Zakariae Tafjouti]
-
 [panji]

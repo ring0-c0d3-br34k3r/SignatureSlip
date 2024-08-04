@@ -1,6 +1,6 @@
 #include "ntdll\ntdll.h"
 #include "ntdll\ntstatus.h"
-#include "main.h"
+#include "SignatureSlip.h"
 #include "vbox.h"
 #include "vboxdrv.h"
 #include "ldasm.h"

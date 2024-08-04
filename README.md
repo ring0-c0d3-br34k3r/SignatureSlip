@@ -1,57 +1,40 @@
 # SignatureSlip
-This code is a driver loading exploit that bypasses the Windows OS's driver signing time validity checks.
 
+This repository contains code that allows you to disable Driver Signature Enforcement (DSE) in Windows 10 and 11. 
 
+## Overview
 
-==> "SignatureSlip : A Windows Driver Loading Exploit"
+Driver Signature Enforcement is a security feature in Windows that requires all drivers to be signed by Microsoft with a digital signature before they can be installed and loaded into the Windows kernel. This feature enhances system stability and security by ensuring that only trusted and verified drivers are allowed to run on the system.
 
-- Overview
+However, there may be scenarios where you need to install unsigned or unverified drivers, such as when using drivers from unofficial sources or when developing custom drivers. The code in this repository provides a way to disable the Driver Signature Enforcement feature, allowing you to install and load unsigned drivers on your system.
 
-SignatureSlip is a Windows driver loading exploit that empowers users to bypass the digital certificate validation checks in the CertVerifyTimeValidity function, allowing them to load unsigned drivers on Windows systems.
+## Features
 
-- Features :
+- Disables Driver Signature Enforcement in Windows 10 and 11.
+- Includes shellcode payloads for both Windows 10 and 11.
+- Allows the installation and loading of unsigned drivers.
+- Can be used by security researchers, Red/blue teams...
 
-~ Bypasses Digital Certificate Validation : WinDriverForce bypasses the digital certificate validation checks in the CertVerifyTimeValidity function, allowing users to load unsigned drivers on Windows systems.
+## Usage
 
-~ Customizable Driver Loading : The tool provides a user-friendly interface for selecting and loading unsigned drivers.
+1. Ensure that you understand the implications of disabling Driver Signature Enforcement and the potential security risks involved.
+2. Compile the code using a C/C++ compiler that supports Windows development.
+3. Run the compiled executable with administrative privileges.
+4. The program will load a vulnerable driver and manipulate kernel-level variables to disable the Driver Signature Enforcement feature.
+5. After the modification, you will be able to install and load unsigned drivers on your system.
+6. Use caution when installing unsigned drivers and ensure they come from trusted sources.
 
-~ Anti-Debugging Techniques : WinDriverForce includes anti-debugging techniques to evade detection by debuggers and security software.
+## Disclaimer
 
-~ Cross-Platform Compatibility : The tool supports multiple Windows versions, from Windows 7 to the latest releases.
+This code is provided for educational and research purposes only. Disabling Driver Signature Enforcement can introduce security risks to your system. Use this code at your own risk and ensure you understand the implications before running it on your machine.
 
+## Contact
 
-- Getting Started :
+If you have any questions or suggestions regarding this code, feel free to reach out to me :
 
-1 - Clone the repository : "git clone https://github.com/0xp17j8/SignatureSlip.git"
+- Name: Panji
+- Telegram: [@I0p17j8](https://t.me/I0p17j8)
 
-2 - Build the project : cl /EHsc /I "C:\\Detours\\include" SignatureSlip.c /link /LIBPATH:"C:\Detours\lib.ARM\detours.lib" C:\Detours\lib.ARM\detours.lib
+## License
 
-3 - Run the exploit : ./SignatureSlip.exe
-
-4 - Follow the prompts to select and load an unsigned driver
-
-
-Prerequisites :
-
-Windows 7 or later until 11
-Visual Studio 2019 or later (for building)
-A Windows driver (unsigned)
-
-
-- Notes :
-
-Use this tool responsibly and at your own risk. Malfunctioning drivers can cause system instability or data corruption.
-It is recommended to test this tool in a controlled environment before using it on a production system.
-Do not use this tool for malicious activities.
-Acknowledgments
-
-The development of WinDriverForce was inspired by the Detours library and the Windows driver signing policy.
-
-- License :
-
-This project is licensed under the MIT License.
-
-- Author
-
-[Zakariae Tafjouti]
-[panji]
+This code is licensed under the [MIT License](https://opensource.org/licenses/MIT). Feel free to modify, distribute, and use it in accordance with the license terms.

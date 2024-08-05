@@ -1,6 +1,7 @@
 # SignatureSlip
 
 This repository contains code that allows you to disable Driver Signature Enforcement (DSE) in Windows 10 and 11. 
+![image](https://github.com/user-attachments/assets/c8717c93-a679-410b-a32c-b6992806eb46)
 
 ## Overview
 
